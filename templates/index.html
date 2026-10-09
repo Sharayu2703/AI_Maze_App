@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Maze Game — Laya</title>
+
+    <style>
+      :root {
+        font-family: Inter, system-ui, Arial, sans-serif;
+        color: #eaf0ff;
+        background: #0a1020;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 24px;
+        background: radial-gradient(circle at top left, #1b3152, #0a1020 55%);
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: auto;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .tag {
+        color: #85f0c8;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.15em;
+      }
+      h1 {
+        margin: 0.35rem 0;
+        font-size: clamp(2rem, 5vw, 3rem);
+      }
+      p {
+        color: #b8c7e3;
+        line-height: 1.5;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(270px, 0.8fr);
+        gap: 18px;
+        margin-top: 20px;
+      }
+      .panel {
+        background: #121d32;
+        border: 1px solid #2a3c5a;
+        border-radius: 18px;
+        padding: 20px;
+      }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(9, minmax(0, 1fr));
+        gap: 5px;
+        max-width: 540px;
+        margin: 18px auto;
+      }
+      .cell {
+        aspect-ratio: 1;
+        border-radius: 7px;
+        background: #253650;
+        display: grid;
+        place-items: center;
+        font-size: clamp(0.8rem, 2.4vw, 1.4rem);
+        border: 1px solid #354866;
+      }
+      .wall {
+        background: #080d18;
+        border-color: #080d18;
+      }
+      .start {
+        background: #164d49;
+      }
+      .goal {
+        background: #5d4720;
+      }
+      .player {
+        outline: 3px solid #7ee7c4;
+        outline-offset: -3px;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        max-width: 250px;
+        margin: 12px auto;
+      }
+      .controls button:nth-child(1) {
+        grid-column: 2;
+      }
+      .controls button:nth-child(2) {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      .controls button:nth-child(3) {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      .controls button:nth-child(4) {
+        grid-column: 3;
+        grid-row: 2;
+      }
+      button {
+        border: 1px solid #466080;
+        background: #203653;
+        color: #f3f7ff;
+        padding: 11px 13px;
+        border-radius: 10px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #7ee7c4;
+        color: #061b17;
+        border: 0;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .actions button {
+        flex: 1;
+      }
+      .status {
+        background: #0a1426;
+        border: 1px solid #2a3c5a;
+        border-radius: 10px;
+        padding: 12px;
+        min-height: 70px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        color: #dbe8ff;
+        font-size: 0.92rem;
+      }
+      .muted {
+        font-size: 0.88rem;
+        color: #91a5c8;
+      }
+      @media (max-width: 750px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        body {
+          padding: 14px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main class="wrap">
+      <div class="top">
+        <div>
+          <div class="tag">LOCAL AI • UNSLOTH + LAYA</div>
+          <h1>AI Maze Game</h1>
+          <p>Find a path from 🟢 start to 🏆 goal.</p>
+        </div>
+        <button id="reset">↻ Reset maze</button>
+      </div>
+
+      <div class="layout">
+        <section class="panel">
+          <h2>Maze</h2>
+          <div id="board" class="board"></div>
+
+          <div class="controls">
+            <button data-move="up">↑ Up</button>
+            <button data-move="left">← Left</button>
+            <button data-move="down">↓ Down</button>
+            <button data-move="right">Right →</button>
+          </div>
+          <p class="muted">Use arrow keys or WASD to move.</p>
+        </section>
+
+        <aside class="panel">
+          <h2>Laya decision</h2>
+          <p>Ask your local Laya model to choose a direction.</p>
+
+          <div class="actions">
+            <button class="primary" id="ask">Ask Laya</button>
+            <button id="auto">Let Laya play</button>
+          </div>
+
+          <p>
+            <strong>Moves:</strong> <span id="moves">0</span>
+            &nbsp;
+            <strong>Visited:</strong> <span id="visited">1</span>
+          </p>
+
+          <h3>Activity</h3>
+          <div id="status" class="status">
+            Ready. Start Unsloth and run python app.py.
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <script>
+      const maze = [
+        [0, 0, 1, 0, 0, 0, 1, 0, 0],
+        [1, 0, 1, 0, 1, 0, 1, 0, 1],
+        [0, 0, 0, 0, 1, 0, 0, 0, 1],
+        [0, 1, 1, 0, 1, 1, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1, 0],
+        [1, 1, 0, 1, 1, 0, 0, 0, 0],
+        [0, 0, 0, 0, 1, 0, 1, 1, 0],
+        [0, 1, 1, 0, 1, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 1, 1, 0],
+      ];
+
+      const start = { r: 0, c: 0 };
+      const goal = { r: 8, c: 8 };
+      const dirs = {
+        up: [-1, 0],
+        right: [0, 1],
+        down: [1, 0],
+        left: [0, -1],
+      };
+
+      let player = { ...start };
+      let moves = 0;
+      let visited = new Set(["0,0"]);
+      let busy = false;
+      let autoTimer = null;
+      let autoRunId = 0;
+
+      const $ = (id) => document.getElementById(id);
+      const key = (p) => `${p.r},${p.c}`;
+
+      function open(r, c) {
+        return (
+          r >= 0 &&
+          c >= 0 &&
+          r < maze.length &&
+          c < maze[0].length &&
+          maze[r][c] === 0
+        );
+      }
+
+      function say(message) {
+        $("status").textContent = message;
+      }
+
+      function render() {
+        const board = $("board");
+        board.innerHTML = "";
+
+        for (let r = 0; r < maze.length; r++) {
+          for (let c = 0; c < maze[r].length; c++) {
+            const cell = document.createElement("div");
+
+            cell.className =
+              "cell" +
+              (maze[r][c] ? " wall" : "") +
+              (r === start.r && c === start.c ? " start" : "") +
+              (r === goal.r && c === goal.c ? " goal" : "") +
+              (r === player.r && c === player.c ? " player" : "");
+
+            if (r === player.r && c === player.c) cell.textContent = "🧑";
+            else if (r === start.r && c === start.c) cell.textContent = "🟢";
+            else if (r === goal.r && c === goal.c) cell.textContent = "🏆";
+
+            board.appendChild(cell);
+          }
+        }
+
+        $("moves").textContent = moves;
+        $("visited").textContent = visited.size;
+
+        document.querySelectorAll("[data-move]").forEach((btn) => {
+          const [dr, dc] = dirs[btn.dataset.move];
+          btn.disabled = busy || !open(player.r + dr, player.c + dc);
+        });
+      }
+
+      function stopAuto(message) {
+        autoRunId++;
+
+        if (autoTimer !== null) {
+          clearTimeout(autoTimer);
+          autoTimer = null;
+        }
+
+        $("auto").textContent = "Let Laya play";
+        if (message) say(message);
+      }
+
+      function move(dir) {
+        if (busy || !dirs[dir]) return false;
+
+        const [dr, dc] = dirs[dir];
+        const nr = player.r + dr;
+        const nc = player.c + dc;
+
+        if (!open(nr, nc)) {
+          say(`Cannot move ${dir}: wall or edge.`);
+          return false;
+        }
+
+        player = { r: nr, c: nc };
+        moves++;
+        visited.add(key(player));
+        render();
+
+        if (player.r === goal.r && player.c === goal.c) {
+          stopAuto(`🎉 Maze solved in ${moves} moves!`);
+        } else {
+          say(`Moved ${dir}.`);
+        }
+
+        return true;
+      }
+
+      function shortestPathDirection() {
+        const queue = [{ ...player, first: null }];
+        const seen = new Set([key(player)]);
+
+        while (queue.length) {
+          const current = queue.shift();
+
+          if (current.r === goal.r && current.c === goal.c) {
+            return current.first;
+          }
+
+          for (const [dir, [dr, dc]] of Object.entries(dirs)) {
+            const nr = current.r + dr;
+            const nc = current.c + dc;
+            const k = `${nr},${nc}`;
+
+            if (open(nr, nc) && !seen.has(k)) {
+              seen.add(k);
+              queue.push({
+                r: nr,
+                c: nc,
+                first: current.first || dir,
+              });
+            }
+          }
+        }
+
+        return null;
+      }
+
+      function stateText() {
+        const rows = [];
+
+        for (let r = 0; r < maze.length; r++) {
+          let row = "";
+          for (let c = 0; c < maze[r].length; c++) {
+            row += maze[r][c]
+              ? "#"
+              : r === goal.r && c === goal.c
+                ? "G"
+                : r === player.r && c === player.c
+                  ? "P"
+                  : ".";
+          }
+          rows.push(row);
+        }
+
+        const options = Object.entries(dirs)
+          .map(
+            ([name, [dr, dc]]) =>
+              `${name}: ${open(player.r + dr, player.c + dc) ? "open" : "WALL"}`,
+          )
+          .join("; ");
+
+        return `Maze (#=wall, .=open, P=player, G=goal):
+${rows.join("\n")}
+Player row ${player.r}, column ${player.c}.
+Goal row ${goal.r}, column ${goal.c}.
+Moves: ${moves}.
+Available directions: ${options}.
+Choose an open direction to reach the goal.`;
+      }
+
+      async function askOnce() {
+        if (busy) return null;
+
+        busy = true;
+        render();
+        $("ask").disabled = true;
+        $("auto").disabled = true;
+        say("Asking local Laya model… first request may take 10–20 seconds.");
+
+        try {
+          const response = await fetch("/api/decide", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ state: stateText() }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || "Backend error");
+          }
+
+          const dir = String(data.choice || "")
+            .toLowerCase()
+            .trim();
+
+          if (!dirs[dir]) {
+            throw new Error("No valid direction returned by API.");
+          }
+
+          say(`Laya suggests: ${dir.toUpperCase()}`);
+          return dir;
+        } catch (error) {
+          say("Request failed: " + error.message);
+          return null;
+        } finally {
+          busy = false;
+          $("ask").disabled = false;
+          $("auto").disabled = false;
+          render();
+        }
+      }
+
+      $("ask").addEventListener("click", async () => {
+        const dir = await askOnce();
+        if (!dir) return;
+
+        const [dr, dc] = dirs[dir];
+
+        if (open(player.r + dr, player.c + dc)) {
+          move(dir);
+        } else {
+          say(
+            `Laya chose blocked direction ${dir}. Try again or use auto-play.`,
+          );
+        }
+      });
+
+      $("auto").addEventListener("click", () => {
+        if (autoTimer !== null) {
+          stopAuto("Auto-play stopped.");
+          return;
+        }
+
+        const runId = ++autoRunId;
+        $("auto").textContent = "Stop auto-play";
+        say("Laya auto-play started.");
+
+        async function tick() {
+          autoTimer = null;
+
+          if (runId !== autoRunId) return;
+
+          if (player.r === goal.r && player.c === goal.c) {
+            stopAuto(`🎉 Maze solved in ${moves} moves!`);
+            return;
+          }
+
+          const dir = await askOnce();
+
+          if (runId !== autoRunId) return;
+
+          let chosen = dir;
+
+          if (
+            !chosen ||
+            !open(player.r + dirs[chosen][0], player.c + dirs[chosen][1])
+          ) {
+            chosen = shortestPathDirection();
+            if (!chosen) {
+              stopAuto("No path to goal found.");
+              return;
+            }
+            say(`Using safe path: ${chosen.toUpperCase()}.`);
+          }
+
+          if (!move(chosen)) {
+            stopAuto("Could not move. Auto-play stopped.");
+            return;
+          }
+
+          if (player.r === goal.r && player.c === goal.c) return;
+
+          if (runId === autoRunId) {
+            autoTimer = setTimeout(tick, 500);
+          }
+        }
+
+        autoTimer = setTimeout(tick, 100);
+      });
+
+      $("reset").addEventListener("click", () => {
+        stopAuto();
+        player = { ...start };
+        moves = 0;
+        visited = new Set(["0,0"]);
+        say("Maze reset. Ask Laya or move with the arrows.");
+        render();
+      });
+
+      document.querySelectorAll("[data-move]").forEach((btn) => {
+        btn.addEventListener("click", () => move(btn.dataset.move));
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const map = {
+          ArrowUp: "up",
+          w: "up",
+          ArrowRight: "right",
+          d: "right",
+          ArrowDown: "down",
+          s: "down",
+          ArrowLeft: "left",
+          a: "left",
+        };
+
+        const dir = map[event.key];
+
+        if (dir) {
+          event.preventDefault();
+          move(dir);
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
